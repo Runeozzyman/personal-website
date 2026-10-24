@@ -97,9 +97,11 @@ const timelineTicks = [...document.querySelectorAll("[data-timeline]")];
 
 function syncTimeline() {
   if (!timelineTicks.length) return;
-  const index = nearestIndex(snapElements());
-  timelineTicks.forEach((tick, i) => {
-    if (i === index) tick.setAttribute("aria-current", "true");
+  const elements = snapElements();
+  const currentId = elements[nearestIndex(elements)]?.id;
+  timelineTicks.forEach((tick) => {
+    const tickId = tick.getAttribute("href")?.slice(1);
+    if (tickId && tickId === currentId) tick.setAttribute("aria-current", "true");
     else tick.removeAttribute("aria-current");
   });
 }
