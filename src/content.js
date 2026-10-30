@@ -1,6 +1,8 @@
 export const profile = {
   name: "Austin Wort",
   role: "Full-stack engineer",
+  loginSummary: "A short line about you goes here. Swap this for one sentence when the real one is ready.",
+  photo: null,
   bio: "AI-native, backend-leaning full-stack developer passionate about building polished, performant, user-focused applications. Comfortable in fast-paced environments with a high degree of autonomy.",
   location: "Calgary, AB, CAN",
   relocation: "Open to relocation",

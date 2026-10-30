@@ -30,6 +30,37 @@ function useClock() {
   return now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
+function useCalgaryTemperature() {
+  const [temperature, setTemperature] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const response = await fetch(
+          "https://api.open-meteo.com/v1/forecast?latitude=51.0447&longitude=-114.0719&current=temperature_2m"
+        );
+        if (!response.ok) return;
+        const data = await response.json();
+        const value = data?.current?.temperature_2m;
+        if (!cancelled && Number.isFinite(value)) setTemperature(Math.round(value));
+      } catch {
+        // Keep the city label visible when the forecast cannot be reached.
+      }
+    }
+
+    load();
+    const id = window.setInterval(load, 15 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  return temperature;
+}
+
 function WindowBody({ id }) {
   if (id === "about") {
     return (
@@ -109,10 +140,83 @@ function WindowBody({ id }) {
   return <p className="empty">Recycle Bin is empty.</p>;
 }
 
+function LoginScreen({ phase, onLogOn }) {
+  const welcoming = phase !== "login";
+
+  return (
+    <div className={phase === "leaving" ? "login leaving" : "login"} role="dialog" aria-label="Log on">
+      {welcoming ? (
+        <div className="welcome-panel">
+          <p className="welcome-kicker">welcome</p>
+          <p className="welcome-name">{profile.name}</p>
+          <div className="loading-blocks" aria-hidden="true">
+            {Array.from({ length: 8 }, (_, index) => (
+              <span key={index} style={{ animationDelay: `${index * 120}ms` }} />
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="login-card">
+          <p className="login-kicker">welcome</p>
+          <form
+            className="account"
+            onSubmit={(event) => {
+              event.preventDefault();
+              onLogOn();
+            }}
+          >
+            <span className="portrait">
+              <span className="portrait-frame">
+                {profile.photo ? (
+                  <img className="portrait-photo" src={profile.photo} alt="" />
+                ) : (
+                  <PixelIcon id="user" />
+                )}
+              </span>
+              <span className="portrait-caption">Photo</span>
+            </span>
+            <span className="account-copy">
+              <span className="account-name">{profile.name}</span>
+              <span className="account-summary">{profile.loginSummary}</span>
+              <span className="password-line">
+                <label className="password-label" htmlFor="logon-password">
+                  Password
+                </label>
+                <input
+                  id="logon-password"
+                  className="password-input"
+                  type="text"
+                  value="********"
+                  readOnly
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <button type="submit" className="logon-button" autoFocus>
+                  <svg className="logon-arrow" viewBox="0 0 7 7" aria-hidden="true">
+                    <g fill="currentColor" shapeRendering="crispEdges">
+                      <rect x="0" y="3" width="4" height="1" />
+                      <rect x="3" y="2" width="1" height="3" />
+                      <rect x="4" y="1" width="1" height="5" />
+                      <rect x="5" y="2" width="1" height="3" />
+                      <rect x="6" y="3" width="1" height="1" />
+                    </g>
+                  </svg>
+                  log on
+                </button>
+              </span>
+            </span>
+          </form>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const compact = useMedia(compactQuery);
   const coarse = useMedia(coarseQuery);
   const clock = useClock();
+  const temperature = useCalgaryTemperature();
   const zRef = useRef(1);
   const windowsRef = useRef({});
   const positionsRef = useRef({});
@@ -127,6 +231,8 @@ export default function App() {
   const [selectedId, setSelectedId] = useState(null);
   const [startOpen, setStartOpen] = useState(false);
   const [loggingOff, setLoggingOff] = useState(false);
+  const [boot, setBoot] = useState("login");
+  const bootTimer = useRef([]);
 
   useEffect(() => {
     windowsRef.current = windows;
@@ -141,7 +247,10 @@ export default function App() {
       if (event.key === "Escape") setStartOpen(false);
     }
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      bootTimer.current.forEach((id) => window.clearTimeout(id));
+    };
   }, []);
 
   function focusWindow(id) {
@@ -206,13 +315,36 @@ export default function App() {
     openProgram(id);
   }
 
+  function clearBootTimers() {
+    bootTimer.current.forEach((id) => window.clearTimeout(id));
+    bootTimer.current = [];
+  }
+
+  function logOn() {
+    if (boot !== "login") return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) {
+      setBoot("done");
+      return;
+    }
+    setBoot("welcome");
+    const welcome = window.setTimeout(() => {
+      setBoot("leaving");
+      const leave = window.setTimeout(() => setBoot("done"), 420);
+      bootTimer.current.push(leave);
+    }, 1300);
+    bootTimer.current.push(welcome);
+  }
+
   function logOff() {
+    clearBootTimers();
     setStartOpen(false);
     setLoggingOff(true);
     window.setTimeout(() => {
       setWindows({});
       setActiveId(null);
       setLoggingOff(false);
+      setBoot("login");
     }, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 700);
   }
 
@@ -422,10 +554,18 @@ export default function App() {
             </button>
           ))}
         </div>
+        <div
+          className="place"
+          aria-label={temperature == null ? "Calgary, AB" : `Calgary, AB, ${temperature} degrees Celsius`}
+        >
+          <span>Calgary, AB</span>
+          {temperature != null && <span>{temperature}°C</span>}
+        </div>
         <div className="clock">{clock}</div>
       </footer>
 
       {loggingOff && <div className="logoff-screen">Logging off...</div>}
+      {boot !== "done" && <LoginScreen phase={boot} onLogOn={logOn} />}
     </div>
   );
 }
